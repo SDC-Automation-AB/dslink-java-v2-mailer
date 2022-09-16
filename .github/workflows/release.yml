@@ -1,0 +1,76 @@
+name: Java Release
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags 
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+env:
+  ARTIFACT_NAME: dslink-java-v2-mailer
+
+jobs:
+  build:
+    runs-on: [ubuntu-latest]
+    steps:
+    - uses: actions/checkout@v1
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+    - name: Make gradlew executable
+      run: chmod +x ./gradlew
+    - name: Build with Gradle
+      env:
+        SDC_PACKAGES_TOKEN: ${{ secrets.SDC_PACKAGES_TOKEN }}
+      run: ./gradlew build
+    - name: Get the version
+      id: get_version
+      run: echo ::set-output name=VERSION::$(find ./build/distributions -name 'dslink-java-v2-mailer-*.zip'|grep -Eo '[0-9][0-9\.]+[0-9]')
+    - name: Get change log 
+      id: get_changelog
+      run: |
+        changelog=$(cat ./release/${{ steps.get_version.outputs.VERSION }}.txt)
+        echo $changelog
+        changelog="${changelog//'%'/'%25'}"
+        changelog="${changelog//$'\n'/'%0A'}"
+        changelog="${changelog//$'\r'/'%0D'}"
+        echo ::set-output name=CHANGELOG::$changelog
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: "Ny version *dslink-java-v2-mailer ${{ steps.get_version.outputs.VERSION }}* finns tillgänglig :rocket:\n\n${{ steps.get_changelog.outputs.CHANGELOG }}\n\n"
+        draft: false
+        prerelease: false
+    - name: Upload Release Asset
+      id: upload-release-asset 
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
+        asset_path: ./build/distributions/dslink-java-v2-mailer-${{ steps.get_version.outputs.VERSION }}.zip
+        asset_name: dslink-java-v2-mailer-${{ steps.get_version.outputs.VERSION }}.zip
+        asset_content_type: application/zip
+    - name: Publish artifact ecocloud repository
+      run: |
+          curl -fail -i -X POST \
+          -H 'Content-Type: multipart/form-data' \
+          -H 'dslink-name: ${{ env.ARTIFACT_NAME }}' \
+          -H 'auth-token: ${{ secrets.DSLINK_REPO_TOKEN }}' \
+          -F 'zip=@build/distributions/${{ env.ARTIFACT_NAME }}-${{ steps.get_version.outputs.VERSION }}.zip' \
+          https://api.ecocloud.ai/dslinks-repo/v1/file/${{ env.ARTIFACT_NAME }}/${{ steps.get_version.outputs.VERSION }}
+    - name: Slack Notification
+      uses: SDC-Automation-AB/github-slack-action@master
+      with:
+        SLACK_CHANNEL: dslink-java-mailer
+        SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+        SLACK_TITLE: dslink-java-v2-mailer-${{ steps.get_version.outputs.VERSION }}.zip
+        SLACK_COMMENT: "Ny version *dslink-java-v2-mailer ${{ steps.get_version.outputs.VERSION }}* finns tillgänglig :rocket:\n\n${{ steps.get_changelog.outputs.CHANGELOG }}\n\n"
+        SLACK_FILE: ./build/distributions/dslink-java-v2-mailer-${{ steps.get_version.outputs.VERSION }}.zip
+        SLACK_FILENAME: dslink-java-v2-mailer-${{ steps.get_version.outputs.VERSION }}.zip

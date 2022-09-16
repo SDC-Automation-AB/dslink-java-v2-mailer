@@ -1,0 +1,5 @@
+:rocket: *Features*
+
+- Forked from IOT-DSA V2. Updated dependencies to fix handling of nodes.zip files.
+
+:beetle: *Bugs*
