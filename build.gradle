@@ -18,7 +18,6 @@ repositories {
             password = System.getenv("SDC_REPO_USER_TOKEN")
         }
     }
-    jcenter()
     mavenLocal()
     maven {
         url 'https://jitpack.io'
